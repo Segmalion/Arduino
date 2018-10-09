@@ -15,8 +15,8 @@
 #define postingInterval (5 * 60 * 1000) // интервал между отправками данных в миллисекундах (5 минут)
 #define DHTTYPE DHT22 
 #define DHTPIN D4 // * ПИНЫ: - DHT22
-#define I2CSDA D2 // *       - I2C sda
-#define I2CSCL D1 // *       - I2C scl
+#define I2CSDA 4 // *       - I2C sda
+#define I2CSCL 5 // *       - I2C scl
 #define ButPIN D8 // *       - Button
 
 LiquidCrystal_I2C lcd(0x27,20,4); // инициализация дисплея
@@ -81,9 +81,9 @@ void dhtRead()
 
 void displayStart() 
 {
-  lcd.init(4,5); // ! До этого была строка lcd.init(4,5); ..незнаю зачем..
+  lcd.init(I2CSDA,I2CSCL); // ! До этого была строка lcd.init(4,5); ..незнаю зачем..
   lcd.backlight();
-  lcd.setCursor(0,0);
+  lcd.setCursor(1,1);
   lcd.print("OK");
 }
 
@@ -94,7 +94,7 @@ void screen()
 
 void setup()
 {
-  
+  displayStart();
   pinMode(ButPIN, INPUT);
   Serial.begin(115200);
   for(int i=10; i>0; i--) {Serial.println(i); delay(1000);}
