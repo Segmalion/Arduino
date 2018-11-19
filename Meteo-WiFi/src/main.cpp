@@ -24,7 +24,7 @@ DHT dht(DHTPIN, DHTTYPE); // инициализация DHT22
 
 const char* ssid     = "Segma-WiFi";
 const char* password = "derq5898587";
-boolean firstReadDHT = true;
+boolean firstReadDHT = true, screenLight = true;
 float dhtTemp, dhtHum;
 unsigned long lastConnectionTime = 0; // время последней передачи данных
 String Hostname;                      // * имя железки - выглядит как ESPAABBCCDDEEFF т.е. ESP+mac адрес.
@@ -38,6 +38,9 @@ void wifiCon()
   {
     Serial.print("Подключение Wifi");
   }
+  lcd.clear();
+  lcd.setCursor(1,1);
+  lcd.print("Connect to WiFi...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) 
@@ -54,6 +57,8 @@ void wifiCon()
     Serial.print("Narodmon ID: ");  Serial.println(Hostname);
     Serial.println();
   }
+  lcd.setCursor(8,3);
+  lcd.print("*OK*");
 }
 
 void dhtRead()
@@ -83,24 +88,46 @@ void displayStart()
 {
   lcd.init(I2CSDA,I2CSCL); // ! До этого была строка lcd.init(4,5); ..незнаю зачем..
   lcd.backlight();
-  lcd.setCursor(1,1);
-  lcd.print("OK");
+  lcd.setCursor(2,1); 
+  lcd.print("-= Meteo WiFi =-");
+  lcd.setCursor(8,3); 
+  lcd.print("v.0.1");
+  for(int i=10; i>0; i--) {Serial.println(i); delay(1000);}
 }
 
-void screen()
+void displayFirst()
 {
-  
+  lcd.clear();
+  lcd.setCursor(0,0); lcd.print("Temp:");
+  lcd.setCursor(6,0); lcd.print(dhtTemp);
+  lcd.setCursor(0,1); lcd.print("Humm:");
+  lcd.setCursor(6,1); lcd.print(dhtHum);
+}
+
+void displayLoop()
+{
+  lcd.setCursor(6,0); lcd.print("     ");
+  lcd.setCursor(6,0); lcd.print(dhtTemp);
+  lcd.setCursor(6,1); lcd.print("     ");
+  lcd.setCursor(6,1); lcd.print(dhtHum);
+}
+
+void screenON() //отключение экрана
+{
+  switch (screenLight){
+    case true:  { lcd.noBacklight(); screenLight = false; break;}  
+    case false: { lcd.backlight();   screenLight = true;  break;}
+  }
 }
 
 void setup()
 {
+  Serial.begin(115200);
   displayStart();
   pinMode(ButPIN, INPUT);
-  Serial.begin(115200);
-  for(int i=10; i>0; i--) {Serial.println(i); delay(1000);}
   Serial.println("Загрузка...");
   // время на запуск
-  attachInterrupt(digitalPinToInterrupt(ButPIN), screen, FALLING);
+  attachInterrupt(digitalPinToInterrupt(ButPIN), screenON, RISING);
   wifiCon();
   lastConnectionTime = millis() - postingInterval + 15000; //первая передача на народный мониторинг через 15 сек.
   ArduinoOTA.onStart([]() {
@@ -122,11 +149,11 @@ void setup()
   });
   ArduinoOTA.begin();
   dhtRead(); // первое чтение датчика
+  displayFirst();
 }
 
 bool SendToNarodmon()
 { // Собственно формирование пакета и отправка
-  dhtRead(); // Читаем датчик
   WiFiClient client;
   String buf;
   buf = "#" + Hostname + "#Segma-BME280-HOME" + "\r\n"; // заголовок И ИМЯ, которое будет отображаться в народном мониторинге, чтоб не палить мак адрес
@@ -158,6 +185,8 @@ void loop()
   ArduinoOTA.handle();
   delay(1000); // нужна, беж делея у меня не подключался к вайфаю
   //Serial.println(bme.readTemperature());
+  dhtRead();
+  displayLoop();
   if (millis() - lastConnectionTime > postingInterval)
   { // ждем 5 минут и отправляем
     if (WiFi.status() == WL_CONNECTED)
