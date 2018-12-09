@@ -127,7 +127,7 @@ void setup()
   pinMode(ButPIN, INPUT);
   Serial.println("Загрузка...");
   // время на запуск
-  attachInterrupt(digitalPinToInterrupt(ButPIN), screenON, RISING);
+  attachInterrupt(digitalPinToInterrupt(ButPIN), screenON, FALLING);
   wifiCon();
   lastConnectionTime = millis() - postingInterval + 15000; //первая передача на народный мониторинг через 15 сек.
   ArduinoOTA.onStart([]() {
