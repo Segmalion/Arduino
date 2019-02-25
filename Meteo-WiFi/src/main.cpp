@@ -10,23 +10,27 @@
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include <GyverEncoder.h>
 
 #define sendNM false
 #define debug true                     // вывод отладочных сообщений
 #define postingInterval (5 * 60 * 1000) // интервал между отправками данных в миллисекундах (5 минут)
 #define DHTTYPE DHT22 
 #define DHTPIN D4 // * ПИНЫ: - DHT22
-#define I2CSDA 4 // *       - I2C sda
-#define I2CSCL 5 // *       - I2C scl
-//! #define ButPIN D8 // *       - Button
+#define I2CSDA 4 // *        - I2C sda
+#define I2CSCL 5 // *        - I2C scl
+#define EnkCLK D7 // *       - энкодер CLK
+#define EnkDT D6 // *                  DT
+#define EnkSW D5 // *                  SW
 
+Encoder enc1(CLK, DT, SW); // инициализация энкодера
 LiquidCrystal_I2C lcd(0x27,20,4); // инициализация дисплея
 DHT dht(DHTPIN, DHTTYPE); // инициализация DHT22
 
 const char* ssid     = "Segma-WiFi";
 const char* password = "derq5898587";
 boolean firstReadDHT = true, screenLight = true;
-float dhtTemp, dhtHum;
+float dhtTemp, dhtHum, tempHistHour[24][3];
 unsigned long lastConnectionTime = 0; // время последней передачи данных
 String Hostname;                      // * имя железки - выглядит как ESPAABBCCDDEEFF т.е. ESP+mac адрес.
 
@@ -92,7 +96,7 @@ void displayStart()
   lcd.setCursor(2,1); 
   lcd.print("-= Meteo WiFi =-");
   lcd.setCursor(8,3); 
-  lcd.print("v.0.2");
+  lcd.print("v.0.3");
   for(int i=10; i>0; i--) {Serial.println(i); delay(1000);}
 }
 
@@ -113,11 +117,11 @@ void displayLoop()
   lcd.setCursor(6,1); lcd.print(dhtHum);
 }
 
-void screenON() //отключение экрана
+void enk() //отключение экрана
 {
-  switch (screenLight){
-    case true:  { lcd.noBacklight(); screenLight = false; break;}  
-    case false: { lcd.backlight();   screenLight = true;  break;}
+  enc1.tick();  // отработка в прерывании
+  if (screenLight=false) {
+    lcd.backlight(); screenLight = true; // эсли отключена подсветка - включаем
   }
 }
 
@@ -125,10 +129,11 @@ void setup()
 {
   Serial.begin(115200);
   displayStart();
-  // ! **** pinMode(ButPIN, INPUT);
+  pinMode(EnkCLK, INPUT);
   Serial.println("Загрузка...");
   // время на запуск
-  // ! **** attachInterrupt(digitalPinToInterrupt(ButPIN), screenON, FALLING);
+  attachInterrupt(digitalPinToInterrupt(EnkCLK), enk, CHANGE);
+  
   wifiCon();
   lastConnectionTime = millis() - postingInterval + 15000; //первая передача на народный мониторинг через 15 сек.
   ArduinoOTA.onStart([]() {
