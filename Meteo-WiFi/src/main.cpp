@@ -11,13 +11,14 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 
+#define sendNM false
 #define debug true                     // вывод отладочных сообщений
 #define postingInterval (5 * 60 * 1000) // интервал между отправками данных в миллисекундах (5 минут)
 #define DHTTYPE DHT22 
 #define DHTPIN D4 // * ПИНЫ: - DHT22
 #define I2CSDA 4 // *       - I2C sda
 #define I2CSCL 5 // *       - I2C scl
-#define ButPIN D8 // *       - Button
+//! #define ButPIN D8 // *       - Button
 
 LiquidCrystal_I2C lcd(0x27,20,4); // инициализация дисплея
 DHT dht(DHTPIN, DHTTYPE); // инициализация DHT22
@@ -91,7 +92,7 @@ void displayStart()
   lcd.setCursor(2,1); 
   lcd.print("-= Meteo WiFi =-");
   lcd.setCursor(8,3); 
-  lcd.print("v.0.1");
+  lcd.print("v.0.2");
   for(int i=10; i>0; i--) {Serial.println(i); delay(1000);}
 }
 
@@ -124,10 +125,10 @@ void setup()
 {
   Serial.begin(115200);
   displayStart();
-  pinMode(ButPIN, INPUT);
+  // ! **** pinMode(ButPIN, INPUT);
   Serial.println("Загрузка...");
   // время на запуск
-  attachInterrupt(digitalPinToInterrupt(ButPIN), screenON, FALLING);
+  // ! **** attachInterrupt(digitalPinToInterrupt(ButPIN), screenON, FALLING);
   wifiCon();
   lastConnectionTime = millis() - postingInterval + 15000; //первая передача на народный мониторинг через 15 сек.
   ArduinoOTA.onStart([]() {
@@ -187,8 +188,7 @@ void loop()
   //Serial.println(bme.readTemperature());
   dhtRead();
   displayLoop();
-  if (millis() - lastConnectionTime > postingInterval)
-  { // ждем 5 минут и отправляем
+  if (millis() - lastConnectionTime > postingInterval && sendNM){ // ! Отправка на нар.мон.
     if (WiFi.status() == WL_CONNECTED)
     { // ну конечно если подключены
       if (SendToNarodmon())
