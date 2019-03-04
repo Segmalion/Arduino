@@ -1,7 +1,8 @@
 #include <Wire.h>
-#include <DHT.h>
-#include <Adafruit_Sensor.h>
 #include <LiquidCrystal_I2C.h>
+#include <SPI.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
@@ -12,25 +13,25 @@
 #include <ArduinoOTA.h>
 #include <GyverEncoder.h>
 
-#define sendNM false
-#define debug true                     // вывод отладочных сообщений
+#define sendNM true
+#define debug false                     // вывод отладочных сообщений
 #define postingInterval (5 * 60 * 1000) // интервал между отправками данных в миллисекундах (5 минут)
-#define DHTTYPE DHT22 
-#define DHTPIN D4 // * ПИНЫ: - DHT22
+#define SEALEVELPRESSURE_HPA (1013.25)
+
 #define I2CSDA 4 // *        - I2C sda
 #define I2CSCL 5 // *        - I2C scl
-#define EnkCLK D7 // *       - энкодер CLK
-#define EnkDT D6 // *                  DT
-#define EnkSW D5 // *                  SW
+#define EnkCLK 13 // *       - энкодер CLK
+#define EnkDT 12 // *                  DT
+#define EnkSW 14 // *                  SW
 
-Encoder enc1(CLK, DT, SW); // инициализация энкодера
+Encoder enc1(EnkCLK, EnkDT, EnkSW); // инициализация энкодера
 LiquidCrystal_I2C lcd(0x27,20,4); // инициализация дисплея
-DHT dht(DHTPIN, DHTTYPE); // инициализация DHT22
+Adafruit_BME280 bme;
 
 const char* ssid     = "Segma-WiFi";
 const char* password = "derq5898587";
-boolean firstReadDHT = true, screenLight = true;
-float dhtTemp, dhtHum, tempHistHour[24][3];
+boolean firstRead = true, screenLight = true;
+float bmeTemp, bmeHum, bmePres, tempHistHour[24][3];
 unsigned long lastConnectionTime = 0; // время последней передачи данных
 String Hostname;                      // * имя железки - выглядит как ESPAABBCCDDEEFF т.е. ESP+mac адрес.
 
@@ -39,54 +40,33 @@ void wifiCon()
   Hostname = "ESP" + WiFi.macAddress();
   Hostname.replace(":", "");
   WiFi.hostname(Hostname);
-  if (debug)
-  {
-    Serial.print("Подключение Wifi");
-  }
   lcd.clear();
   lcd.setCursor(1,1);
   lcd.print("Connect to WiFi...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) 
-  {
-    delay(500);
-    Serial.print(".");
-  }
-  if (debug)
-  { 
-    Serial.println();
-    Serial.print("Подключенно к "); Serial.println(ssid);
-    Serial.print("IP адрес: ");     Serial.println(WiFi.localIP());
-    Serial.print("MAC адрес: ");    Serial.println(WiFi.macAddress());
-    Serial.print("Narodmon ID: ");  Serial.println(Hostname);
-    Serial.println();
-  }
   lcd.setCursor(8,3);
   lcd.print("*OK*");
 }
 
-void dhtRead()
-{ // чтение датчика DHT
-  startDHT:
-  do{ // выполняем пока не прочьтем датчик
-    dhtTemp = dht.readTemperature();
-    dhtHum = dht.readHumidity();
-    if (debug && firstReadDHT)
-    { // если первый прогон датчика DHT22, и включон дебаг
-      Serial.print("Подключение к DHT22");
-      int i=0;
-      while ((isnan(dhtTemp) || isnan(dhtHum)) && i<25) 
-      {
-        delay(2000);
-        Serial.print(".");
-        if (i<25) i++; else { Serial.println(); Serial.println("Ошибка подключения к DHT22!"); delay(15000); ESP.restart(); }
-      }
+void bmeRead()
+{ // чтение датчика BME280
+  if(firstRead) {
+    start:
+    if (!bme.begin(0X76)) {
+      lcd.setCursor(0,3);
+      lcd.print("...Sensor EROR...");
+      delay(1000*60*5);
+      goto start;
+    } else {
+      lcd.setCursor(0,3);
+      lcd.print("...Sensor GOOD...");
+      firstRead = false;
     }
-    delay(2000);
-  } while ((isnan(dhtTemp) || isnan(dhtHum)));
-  if (dhtTemp==0 && dhtHum==0) {goto startDHT;} // если значения нули - перезапускаем (проверка на нули)
-  else if (debug && firstReadDHT) {Serial.println(); Serial.println("Данные прочитаны!");Serial.println();firstReadDHT = false;}
+  }
+  bmeTemp = bme.readTemperature();
+  bmeHum = bme.readHumidity();
+  bmePres = bme.readPressure()/133.3224;
 }
 
 void displayStart() 
@@ -95,47 +75,46 @@ void displayStart()
   lcd.backlight();
   lcd.setCursor(2,1); 
   lcd.print("-= Meteo WiFi =-");
-  lcd.setCursor(8,3); 
-  lcd.print("v.0.3");
-  for(int i=10; i>0; i--) {Serial.println(i); delay(1000);}
+  lcd.setCursor(7,2); 
+  lcd.print("v.0.4.1");
+  delay(4000);
 }
 
 void displayFirst()
 {
   lcd.clear();
   lcd.setCursor(0,0); lcd.print("Temp:");
-  lcd.setCursor(6,0); lcd.print(dhtTemp);
+  lcd.setCursor(6,0); lcd.print(bmeTemp);
   lcd.setCursor(0,1); lcd.print("Humm:");
-  lcd.setCursor(6,1); lcd.print(dhtHum);
+  lcd.setCursor(6,1); lcd.print(bmeHum);
+  lcd.setCursor(0,2); lcd.print("Pres:");
+  lcd.setCursor(6,2); lcd.print(bmePres); 
 }
 
 void displayLoop()
 {
   lcd.setCursor(6,0); lcd.print("     ");
-  lcd.setCursor(6,0); lcd.print(dhtTemp);
+  lcd.setCursor(6,0); lcd.print(bmeTemp);
   lcd.setCursor(6,1); lcd.print("     ");
-  lcd.setCursor(6,1); lcd.print(dhtHum);
+  lcd.setCursor(6,1); lcd.print(bmeHum);
+  lcd.setCursor(6,2); lcd.print("     ");
+  lcd.setCursor(6,2); lcd.print(bmePres); 
 }
 
 void enk() //отключение экрана
 {
   enc1.tick();  // отработка в прерывании
-  if (screenLight=false) {
-    lcd.backlight(); screenLight = true; // эсли отключена подсветка - включаем
+  if (!screenLight) {
+    lcd.backlight(); 
+    screenLight = true;
+  } else {
+    lcd.noBacklight(); 
+    screenLight = false;
   }
 }
 
-void setup()
+void ota() 
 {
-  Serial.begin(115200);
-  displayStart();
-  pinMode(EnkCLK, INPUT);
-  Serial.println("Загрузка...");
-  // время на запуск
-  attachInterrupt(digitalPinToInterrupt(EnkCLK), enk, CHANGE);
-  
-  wifiCon();
-  lastConnectionTime = millis() - postingInterval + 15000; //первая передача на народный мониторинг через 15 сек.
   ArduinoOTA.onStart([]() {
     Serial.println("Start");  //  "Начало OTA-апдейта"
   });
@@ -154,17 +133,31 @@ void setup()
     else if (error == OTA_END_ERROR) Serial.println("End Failed"); // "Ошибка при завершении OTA-апдейта"
   });
   ArduinoOTA.begin();
-  dhtRead(); // первое чтение датчика
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  displayStart();
+  //pinMode(EnkCLK, INPUT);
+  enc1.setType(TYPE2);
+  attachInterrupt(digitalPinToInterrupt(EnkCLK), enk, CHANGE);
+  enc1.tick();
+  bmeRead(); // первое чтение датчика
+  wifiCon();
+  lastConnectionTime = millis() - postingInterval + 15000; //первая передача на народный мониторинг через 15 сек.
+  ota();
   displayFirst();
 }
 
-bool SendToNarodmon()
+bool sendToNarodmon()
 { // Собственно формирование пакета и отправка
   WiFiClient client;
   String buf;
   buf = "#" + Hostname + "#Segma-BME280-HOME" + "\r\n"; // заголовок И ИМЯ, которое будет отображаться в народном мониторинге, чтоб не палить мак адрес
-  buf = buf + "#T1#" + String(dhtTemp) + "\r\n";        // температура bmp180
-  buf = buf + "#H1#" + String(dhtHum) + "\r\n";         // влажность
+  buf = buf + "#T1#" + String(bmeTemp) + "\r\n";        // температура bmp180
+  buf = buf + "#H1#" + String(bmeHum) + "\r\n";         // влажность
+  buf = buf + "#P1#" + String(bmePres) + "\r\n";        // Давление
   buf = buf + "##\r\n"; // закрываем пакет
 
   if (!client.connect("narodmon.ru", 8283))
@@ -186,17 +179,12 @@ bool SendToNarodmon()
   return true; //ушло
 }
 
-void loop()
+void narodmonStart()
 {
-  ArduinoOTA.handle();
-  delay(1000); // нужна, беж делея у меня не подключался к вайфаю
-  //Serial.println(bme.readTemperature());
-  dhtRead();
-  displayLoop();
   if (millis() - lastConnectionTime > postingInterval && sendNM){ // ! Отправка на нар.мон.
     if (WiFi.status() == WL_CONNECTED)
     { // ну конечно если подключены
-      if (SendToNarodmon())
+      if (sendToNarodmon())
       {
         lastConnectionTime = millis();
       }
@@ -211,5 +199,15 @@ void loop()
       Serial.println("Not connected to WiFi");
     } //следующая попытка через 15 сек
   }
+}
+
+void loop()
+{
+  ArduinoOTA.handle();
+  enc1.tick();
+  delay(1000*10);
+  bmeRead();
+  displayLoop();
+  sendToNarodmon();
   yield(); // ? что за команда - фиг знает, но ESP работает с ней стабильно и не глючит.
 }
