@@ -1,7 +1,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <SPI.h>
-#include <Adafruit_Sensor.h>
+//#include <Adafruit_Sensor.h> --- Оказывается, он не обязателен....
 #include <Adafruit_BME280.h>
 
 #include <ESP8266WiFi.h>
