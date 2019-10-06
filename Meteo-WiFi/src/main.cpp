@@ -18,11 +18,11 @@
 #define postingInterval (5 * 60 * 1000) // интервал между отправками данных в миллисекундах (5 минут)
 #define SEALEVELPRESSURE_HPA (1013.25)
 
-#define I2CSDA 4 // *        - I2C sda
-#define I2CSCL 5 // *        - I2C scl
-#define EnkCLK 13 // *       - энкодер CLK
-#define EnkDT 12 // *                  DT
-#define EnkSW 14 // *                  SW
+#define I2CSDA 4 // I2C sda
+#define I2CSCL 5 // I2C scl
+#define EnkCLK 13 //  энкодер CLK
+#define EnkDT 12 //  DT
+#define EnkSW 14 //  SW
 
 Encoder enc1(EnkCLK, EnkDT, EnkSW); // инициализация энкодера
 LiquidCrystal_I2C lcd(0x27,20,4); // инициализация дисплея
